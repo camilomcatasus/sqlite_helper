@@ -104,3 +104,23 @@ fn add() -> anyhow::Result<()> {
 
     return Ok(());
 }
+
+#[test]
+fn delete() -> anyhow::Result<()> {
+    let conn = rusqlite::Connection::open_in_memory()?;
+    initialize_table(&conn)?;
+    conn.execute("INSERT INTO TestModel (id, comments, test_val) VALUES (1, 'This is a comment', 'test_val');", [])?;
+
+    let result = TestModel {
+        id: 1,
+        comments: None,
+        test_val: String::from("mao"),
+    }.delete(&conn)?;
+
+    assert_eq!(result, 1);
+
+    let exists: Result<usize, rusqlite::Error> = conn.query_row("SELECT * FROM TestModel", [], |row| row.get(0));
+
+    assert_eq!(exists.expect_err("Row should have been deleted"), rusqlite::Error::QueryReturnedNoRows);
+    return Ok(());
+}

@@ -17,6 +17,7 @@ pub fn print_tokens(input: TokenStream) -> TokenStream {
                 let get_fn_tokens = body_get(&fields_named, &struct_name);
                 let add_fn_tokens = body_add(&fields_named, &struct_name);
                 let update_fn_tokens = body_update(&fields_named, &struct_name);
+                let delete_fn_tokens = body_delete(&fields_named, &struct_name);
                 new_functions = quote! {
                     #request
 
@@ -24,6 +25,7 @@ pub fn print_tokens(input: TokenStream) -> TokenStream {
                         #get_fn_tokens
                         #add_fn_tokens
                         #update_fn_tokens
+                        #delete_fn_tokens
                     }
                 }
             }
@@ -39,7 +41,7 @@ pub fn print_tokens(input: TokenStream) -> TokenStream {
 pub fn print_binding_tokens(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
     let new_functions: proc_macro2::TokenStream;
-    if let Data::Enum(enum_struct) = ast.data {
+    if let Data::Enum(_enum_struct) = ast.data {
         let enum_name = ast.ident;
 
         new_functions = quote! {
@@ -186,6 +188,22 @@ fn body_update(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macro2::
     }
 }
 
+fn body_delete(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macro2::TokenStream {
+
+    let struct_name_string = String::from(struct_name.to_string());
+    let idents: Vec<_> = fields_named.named.iter().map(|f| &f.ident).collect();
+
+    let first_ident = idents.get(0).unwrap().as_ref().unwrap();
+    let query_string = format!("DELETE FROM {} WHERE {} = {{}}", struct_name_string, first_ident.to_string());
+    quote! {
+        pub fn delete(&self, conn:&rusqlite::Connection) -> anyhow::Result<usize> {
+            let query_string: String = format!(#query_string, self.#first_ident);
+            let stmt: usize = conn.execute(&query_string, rusqlite::params![])?;
+            return Ok(stmt);
+        }
+    }
+}
+
 #[proc_macro_derive(LibSqlQueryable)]
 pub fn libsql_macro(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
@@ -216,7 +234,6 @@ pub fn libsql_macro(input: TokenStream) -> TokenStream {
         panic!("Only structs are supported");
     }
 
-    println!("{}", new_functions);
     return TokenStream::from(new_functions);
 }
 
