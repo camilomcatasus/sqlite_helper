@@ -4,7 +4,7 @@ use anyhow::Context;
 
 #[derive(LibSqlQueryable, Serialize, Deserialize)]
 pub struct LibSqlTest {
-    pub id: usize,
+    pub id: i64,
     pub test: String
 }
 
