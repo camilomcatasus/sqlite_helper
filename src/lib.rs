@@ -1,9 +1,9 @@
 extern crate proc_macro;
 use quote::quote;
 use proc_macro::TokenStream;
-use syn::{ parse_macro_input, DeriveInput, Data, Fields, FieldsNamed, Ident};
+use syn::{ parse_macro_input, DeriveInput, Field, Meta, Attribute, Data, Fields, FieldsNamed, Ident};
 
-#[proc_macro_derive(Queryable)]
+#[proc_macro_derive(Queryable, attributes(primary))]
 pub fn print_tokens(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
     let new_functions: proc_macro2::TokenStream;
@@ -289,6 +289,29 @@ fn libsql_body_get(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macr
         }
     }
 }
+
+struct FieldAttribute<'a> {
+    pub is_primary: bool,
+    pub is_autoincrement: bool,
+    pub field: &'a Field
+}
+
+fn parse_field(field: &Field) -> FieldAttribute{
+    let is_primary = false;
+    let is_autoincrement = false;
+    for attr in &field.attrs {
+        if attr.path().get_ident() == "primary" {
+            is_primary = true;
+        }
+    }
+
+    return FieldAttribute {
+        is_primary,
+        is_autoincrement,
+        field
+    };
+}
+        
 
 fn libsql_body_add(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macro2::TokenStream {
     let struct_name_string = String::from(struct_name.to_string());
