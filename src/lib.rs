@@ -1,9 +1,9 @@
 extern crate proc_macro;
 use quote::quote;
 use proc_macro::TokenStream;
-use syn::{ parse_macro_input, DeriveInput, Data, Fields, FieldsNamed, Ident};
+use syn::{ parse_macro_input, DeriveInput, Field, Data, Fields, FieldsNamed, Ident};
 
-#[proc_macro_derive(Queryable)]
+#[proc_macro_derive(Queryable, attributes(primary))]
 pub fn print_tokens(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
     let new_functions: proc_macro2::TokenStream;
@@ -204,7 +204,7 @@ fn body_delete(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macro2::
     }
 }
 
-#[proc_macro_derive(LibSqlQueryable)]
+#[proc_macro_derive(LibSqlQueryable, attributes(primary))]
 pub fn libsql_macro(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
     let new_functions: proc_macro2::TokenStream;
@@ -290,25 +290,68 @@ fn libsql_body_get(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macr
     }
 }
 
+struct FieldAttribute<'a> {
+    pub is_primary: bool,
+    pub is_autoincrement: bool,
+    pub field: &'a Field,
+    pub ident: &'a Ident,
+    pub ident_name: String
+}
+
+fn parse_field(field: &Field) -> FieldAttribute{
+    let mut is_primary = false;
+    let mut is_autoincrement = false;
+    for attr in &field.attrs {
+        if let Some(ident) = attr.path().get_ident() {
+            if ident == "primary" {
+                is_primary = true;
+
+                 let _ = attr.parse_nested_meta(|meta| {
+                     if let Some(meta_ident) = meta.path.get_ident() {
+                         if meta_ident == "autoincrement" {
+                            is_autoincrement = true;
+                         }
+                     }
+                     Ok(())
+                 });
+                
+            }
+        }
+    }
+    
+    let ident = &field.ident.as_ref().unwrap();
+    let ident_name = ident.to_string();
+
+    return FieldAttribute {
+        is_primary,
+        is_autoincrement,
+        field,
+        ident,
+        ident_name
+    };
+}
+        
+
 fn libsql_body_add(fields_named: &FieldsNamed, struct_name: &Ident) -> proc_macro2::TokenStream {
     let struct_name_string = String::from(struct_name.to_string());
     let idents: Vec<_> = fields_named.named.iter().map(|f| &f.ident).collect();
-    
-    let vals: Vec<String> = idents.iter()
-        .enumerate()
-        .map(|_| "?".to_string()).collect();
+    let fields: Vec<FieldAttribute> = fields_named.named.iter().map(|f| parse_field(f)).collect();
+
+    let filtered_fields: Vec<&FieldAttribute> = fields.iter().filter(|f| !f.is_autoincrement).collect();
+    let filtered_idents: Vec<&Ident> = filtered_fields.iter().map(|f| f.ident).collect();
+    let vals: Vec<String> = (0..filtered_fields.len()).map(|_| "?".to_string()).collect();
     let joined_vals = vals.join(", ");
 
-    let var_strings: Vec<_> = idents.iter().filter_map(|&opt| opt.as_ref()).map(|ident| ident.to_string()).collect();
+    let var_strings: Vec<_> = filtered_idents.iter().map(|ident| ident.to_string()).collect();
     let joined_vars: String = var_strings.join(", ");
     let query_string: String = format!("INSERT INTO {} ({}) VALUES ({});", struct_name_string, joined_vars, joined_vals);
     
-     
+    println!("{:?}", query_string);
     quote! {
         pub async fn add(&self, client: &libsql_client::Client) -> anyhow::Result<usize> {
             let query_string: &str = #query_string;
             let mut params: Vec<libsql_client::Value> = Vec::new();
-            #(params.push(self.#idents.clone().into());)*
+            #(params.push(self.#filtered_idents.clone().into());)*
             let stmt = client.execute(libsql_client::Statement::with_args(query_string,  &params)).await?;
             return Ok(stmt.rows_affected as usize);
         }

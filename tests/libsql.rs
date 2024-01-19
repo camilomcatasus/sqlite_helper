@@ -64,6 +64,37 @@ async fn add() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(LibSqlQueryable, Serialize, Deserialize)]
+struct AutoIncrementTest {
+    #[primary(autoincrement)]
+    pub id: usize,
+    pub test: String
+}
+
+#[tokio::test]
+async fn add_autoincrement() -> anyhow::Result<()> {
+    let db = libsql_client::Client::in_memory().unwrap();
+    db.execute("CREATE TABLE AutoIncrementTest(id INTEGER PRIMARY KEY AUTOINCREMENT, test TEXT NOT NULL);").await?;
+
+    let test_struct = AutoIncrementTest {
+        id: 0,
+        test: "test".to_string()
+    };
+
+    let result = test_struct.add(&db).await?;
+    assert!(result == 1);
+    let confirm_req = AutoIncrementTestRequest {
+        id: Some(1),
+        test: None,
+    };
+
+    let confirm_struct = AutoIncrementTest::get(&db, confirm_req).await?;
+
+    assert!(confirm_struct.test == "test");
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn update() -> anyhow::Result<()> {
     let db = libsql_client::Client::in_memory().unwrap();
