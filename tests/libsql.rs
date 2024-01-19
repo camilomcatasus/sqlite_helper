@@ -131,7 +131,7 @@ async fn update() -> anyhow::Result<()> {
 #[tokio::test]
 async fn complex_update() -> anyhow::Result<()> {
     let db = libsql_client::Client::in_memory().unwrap();
-    db.execute("CREATE TABLE ComplexUpdateTest(id1 INT, id2 INT, test TEXT NOT NULL);").await?;
+    db.execute("CREATE TABLE ComplexUpdateTest(id1 INT, id2 INT, test TEXT NOT NULL, PRIMARY KEY(id1, id2));").await?;
     db.execute("INSERT INTO ComplexUpdateTest(id1, id2, test) VALUES (1, 1, \"test\");").await?;
     db.execute("INSERT INTO ComplexUpdateTest(id1, id2, test) VALUES (2, 2, \"test\");").await?;
 
